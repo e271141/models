@@ -486,6 +486,8 @@ class ConvolutionalBoxPredictor(BoxPredictor):
         channels] containing features for a batch of images.
       num_predictions_per_location: an integer representing the number of box
         predictions to be made per spatial location in the feature map.
+        Jingzhi: num_predictions_per_location=3*3
+                 _box_code_size=4([10,10,5,5])
 
     Returns:
       A dictionary containing the following tensors.
