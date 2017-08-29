@@ -528,6 +528,7 @@ class ConvolutionalBoxPredictor(BoxPredictor):
     if batch_size is None:
       features_height = static_shape.get_height(image_features.get_shape())
       features_width = static_shape.get_width(image_features.get_shape())
+      # Jingzhi: flattened_predictions_size=37*58*9
       flattened_predictions_size = (features_height * features_width *
                                     num_predictions_per_location)
       box_encodings = tf.reshape(

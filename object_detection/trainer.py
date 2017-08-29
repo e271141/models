@@ -96,6 +96,7 @@ def _get_inputs(input_queue, num_classes):
   """
   read_data_list = input_queue.dequeue()
   label_id_offset = 1
+  
   def extract_images_and_targets(read_data):
     image = read_data[fields.InputDataFields.image]
     location_gt = read_data[fields.InputDataFields.groundtruth_boxes]
@@ -106,6 +107,7 @@ def _get_inputs(input_queue, num_classes):
                                                   depth=num_classes, left_pad=0)
     masks_gt = read_data.get(fields.InputDataFields.groundtruth_instance_masks)
     return image, location_gt, classes_gt, masks_gt
+
   return zip(*map(extract_images_and_targets, read_data_list))
 
 
@@ -263,7 +265,7 @@ def train(create_tensor_dict_fn, create_model_fn, train_config, master, task,
     summaries |= global_summaries
 
     # Merge all summaries together.
-    summary_op = tf.summary.merge(list(summaries), name='summary_op')
+    summary_op = tf.summary.merge(list(summaries), name='summary_op') 
 
     # Soft placement allows placing on CPU ops without GPU implementation.
     session_config = tf.ConfigProto(allow_soft_placement=True,

@@ -156,6 +156,25 @@ def prune_outside_window(boxlist, window, scope=None):
     valid_indices: a tensor with shape [M_out] indexing the valid bounding boxes
      in the input tensor.
   """
+  
+  '''
+  Jingzhi:
+  tf.unpack()
+  For example, given a tensor of shape (A, B, C, D);
+  If axis == 0 then the i'th tensor in output is the slice value[i, :, :, :] 
+      and each tensor in output will have shape (B, C, D).
+  If axis == 1 then the i'th tensor in output is the slice value[:, i, :, :] 
+      and each tensor in output will have shape (A, C, D). Etc.
+
+  tf.split()
+  'value' is a tensor with shape [5, 30]
+  Split 'value' into 3 tensors with sizes [4, 15, 11] along dimension 1
+  split0, split1, split2 = tf.split(value, [4, 15, 11], 1)
+  tf.shape(split0) ==> [5, 4]
+  tf.shape(split1) ==> [5, 15]
+  tf.shape(split2) ==> [5, 11]
+  '''
+
   with tf.name_scope(scope, 'PruneOutsideWindow'):
     y_min, x_min, y_max, x_max = tf.split(
         value=boxlist.get(), num_or_size_splits=4, axis=1)

@@ -236,7 +236,7 @@ class FasterRCNNMetaArch(model.DetectionModel):
       image_resizer_fn: A callable for image resizing.  This callable always
         takes a rank-3 image tensor (corresponding to a single image) and
         returns a rank-3 image tensor, possibly with new spatial dimensions.
-        See builders/image_resizer_builder.py.
+        See builders/image_resizer_builder.py. 
       feature_extractor: A FasterRCNNFeatureExtractor object.
       first_stage_only:  Whether to construct only the Region Proposal Network
         (RPN) part of the model.
@@ -648,9 +648,11 @@ class FasterRCNNMetaArch(model.DetectionModel):
       rpn_box_predictor_features: A 4-D float32 tensor with shape
         [batch, height, width, depth] to be used for predicting proposal boxes
         and corresponding objectness scores.
+        Jingzhi: [1,38,57,1024]
       rpn_features_to_crop: A 4-D float32 tensor with shape
         [batch, height, width, depth] representing image features to crop using
         the proposals boxes.
+        Jingzhi: [1,38,57,1024]
       anchors: A BoxList representing anchors (for the RPN) in
         absolute coordinates.
       image_shape: A 1-D tensor representing the input image shape.
@@ -670,6 +672,7 @@ class FasterRCNNMetaArch(model.DetectionModel):
           kernel_size=[kernel_size, kernel_size],
           rate=self._first_stage_atrous_rate,
           activation_fn=tf.nn.relu6)
+
     return (rpn_box_predictor_features, rpn_features_to_crop,
             anchors, image_shape)
 
@@ -751,6 +754,15 @@ class FasterRCNNMetaArch(model.DetectionModel):
     pruned_anchors_boxlist, keep_indices = box_list_ops.prune_outside_window(
         anchors_boxlist, clip_window)
     def _batch_gather_kept_indices(predictions_tensor):
+      '''Jingzhi: 
+      tf.map_fn: 
+        partial(tf.gather, indices=keep_indices)[fn]:The callable to be performed which takes [elems] as input.
+        [elems]:  A tensor or sequence of tensors, each of which will be unpacked along their first dimension. 
+                  The nested sequence of the resulting slices will be applied to fn
+      tf.gather: 
+        Example: [params]=[1,2,3,4,5] [indices]=[2,3,1,0,0] 
+                 tf.gather(params, indices)=[3,4,2,1,1]
+      ''' 
       return tf.map_fn(
           partial(tf.gather, indices=keep_indices),
           elems=predictions_tensor,
@@ -888,6 +900,8 @@ class FasterRCNNMetaArch(model.DetectionModel):
           rpn_objectness_predictions_with_background)) in enumerate(zip(
               tf.unstack(rpn_box_encodings_batch),
               tf.unstack(rpn_objectness_predictions_with_background_batch))):
+      
+      # Jingzhi: self._box_coder = faster_rcnn_box_coder.FasterRcnnBoxCoder
       decoded_boxes = self._box_coder.decode(
           rpn_box_encodings, box_list.BoxList(anchors))
       objectness_scores = tf.unstack(
@@ -1228,11 +1242,16 @@ class FasterRCNNMetaArch(model.DetectionModel):
 
       # Normalize by number of examples in sampled minibatch
       normalizer = tf.reduce_sum(batch_sampled_indices, axis=1)
+      # Jingzhi
+      #   tf.one_hot: axis=-1(default) shape=features*depth
+      #               The locations represented by indices in indices take value on_value, 
+      #               while all other locations take value off_value.
       batch_one_hot_targets = tf.one_hot(
           tf.to_int32(batch_cls_targets), depth=2)
       sampled_reg_indices = tf.multiply(batch_sampled_indices,
                                         batch_reg_weights)
 
+      # Jingzhi: smooth L1 loss
       localization_losses = self._first_stage_localization_loss(
           rpn_box_encodings, batch_reg_targets, weights=sampled_reg_indices)
       objectness_losses = self._first_stage_objectness_loss(
