@@ -1,47 +1,86 @@
-'''
+from abc import abstractmethod
+from functools import partial
+import tensorflow as tf
+
+from object_detection.anchor_generators import grid_anchor_generator
+from object_detection.core import balanced_positive_negative_sampler as sampler
+from object_detection.core import box_list
+from object_detection.core import box_list_ops
+from object_detection.core import box_predictor
+from object_detection.core import losses
+from object_detection.core import model
+from object_detection.core import post_processing
+from object_detection.core import standard_fields as fields
+from object_detection.core import target_assigner
+from object_detection.utils import ops
+from object_detection.utils import variables_helper
+
+slim = tf.contrib.slim
+
+
+
 Faster-Rcnn full process:
 
-A: prediction_dict = detection_model.predict
+A: prediction_dict = detection_model.predict()
 	a: Train RPN (first stage)
 	  0. preprocessed inputs
-	  1. _extract_rpn_feature_maps
-	    I: rpn_features_to_crop = _feature_extractor.extract_proposal_features
-	    II: anchors = _first_stage_anchor_generator.generate
-          -->GridAnchorGenerator._generate -->GridAnchorGenerator.tile_anchors
-	    III: rpn_box_predictor_features = slim.conv2d
-	  2. _predict_rpn_proposals
-	    I: box_predictions = _first_stage_box_predictor.predict
+	  1. self._extract_rpn_feature_maps()
+	    I: rpn_features_to_crop = self._feature_extractor.extract_proposal_features()
+	    II: anchors = self._first_stage_anchor_generator.generate()
+          -->GridAnchorGenerator._generate() -->GridAnchorGenerator.tile_anchors()
+	    III: rpn_box_predictor_features = slim.conv2d()
+	  2. self._predict_rpn_proposals()
+	    I: box_predictions = self._first_stage_box_predictor.predict()
 	    II: objectness_predictions_with_background = 
-	                      box_predictor.CLASS_PREDICTIONS_WITH_BACKGROUND
+	                      box_predictor.CLASS_PREDICTIONS_WITH_BACKGROUND()
 	  3. _remove_invalid_anchors_and_predictions
-	    I: pruned_anchors_boxlist, keep_indices = box_list_ops.prune_outside_window
+	    I: pruned_anchors_boxlist, keep_indices = box_list_ops.prune_outside_window()
 	    II: _batch_gather_kept_indices(box_encodings)
 	        _batch_gather_kept_indices(objectness_predictions_with_background)
-	        Extremely hard to get through!!!!!!
+	        'Extremely hard to get through!!!!!!'
 
 	b: Classification (second stage)
 	  1. _predict_second_stage
-	  	I: flattened_proposal_feature_maps = _postprocess_rpn
-        i: _format_groundtruth_data: 
-        ii: decoded_boxes = _box_coder.decode(rpn_box_encodings, box_list.BoxList(anchors))
-                            --> faster_rcnn_box_coder.FasterRcnnBoxCoder._decode
+	  	I: flattened_proposal_feature_maps = self._postprocess_rpn()
+      'Very complicate function!!!!!!'
+        i: self._format_groundtruth_data(): 
+        ii: decoded_boxes = self._box_coder.decode(rpn_box_encodings, box_list.BoxList(anchors))
+                            --> faster_rcnn_box_coder.FasterRcnnBoxCoder._decode()
             objectness_scores = tf.nn.softmax(rpn_objectness_predictions_with_background)
-        iii:proposal_boxlist = post_processing.multiclass_non_max_suppression
-	  	II: _compute_second_stage_input_feature_maps
-	  	III: box_classifier_features = _feature_extractor.extract_box_classifier_features
-	  	IV: box_predictions = _mask_rcnn_box_predictor.predict
-	  	V: absolute_proposal_boxes = ops.normalized_to_image_coordinates
+        iii:proposal_boxlist = post_processing.multiclass_non_max_suppression()
+        iv: padded_proposals = box_list_ops.pad_or_clip_box_list()
+	  	II: self._compute_second_stage_input_feature_maps()
+	  	III: box_classifier_features = self._feature_extractor.extract_box_classifier_features()
+	  	IV: box_predictions = self._mask_rcnn_box_predictor.predict()
+	  	V: absolute_proposal_boxes = ops.normalized_to_image_coordinates()
 
 B: losses_dict = detection_model.loss
 	a. _loss_rpn
-	  1. localization_losses = _first_stage_localization_loss
-	  2. objectness_losses = _first_stage_objectness_loss
+	  1. target_assigner.batch_assign_targets()
+      I: target_assigner.assign()
+        i: match_quality_matrix = self._similarity_calc.compare(groundtruth_boxes,anchors)
+                -->sim_calc.IouSimilarity()-->box_list_ops.iou()
+        ii: match = self._matcher.match(match_quality_matrix, **params)
+                -->argmax_matcher.ArgMaxMatcher._match()
+        iii: reg_targets = self._create_regression_targets(anchors,groundtruth_boxes,match)
+        iv: cls_targets = self._create_classification_targets(groundtruth_labels,match)
+        v: reg_weights = self._create_regression_weights(match)
+        vi: cls_weights = self._create_classification_weights(
+                        match, self._positive_class_weight, self._negative_class_weight)
+    2. localization_losses = self._first_stage_localization_loss
+          -->losses.WeightedSmoothL1LocalizationLoss._compute_loss()
+	  3. objectness_losses = self._first_stage_objectness_loss
+          -->losses.WeightedSoftmaxClassificationLoss._compute_loss()
 	b. _loss_box_classifier
-	  1. paddings_indicator = _padded_batched_proposals_indicator
-	  2. second_stage_loc_losses = _second_stage_localization_loss
-    3. second_stage_cls_losses = _second_stage_classification_loss
-    4. second_stage_loc_loss, second_stage_cls_loss = _unpad_proposals_and_apply_hard_mining
-'''
+	  1. paddings_indicator = self._padded_batched_proposals_indicator
+	  2. second_stage_loc_losses = self._second_stage_localization_loss
+          -->losses.WeightedSmoothL1LocalizationLoss._compute_loss()
+    3. second_stage_cls_losses = self._second_stage_classification_loss
+          -->losses.WeightedSoftmaxClassificationLoss._compute_loss()
+    4. second_stage_loc_loss, second_stage_cls_loss = self._unpad_proposals_and_apply_hard_mining
+      I: _hard_example_miner()
+          -->losses_builder.build_hard_example_miner()
+              -->losses.HardExampleMiner()
 
 
   def predict(self, preprocessed_inputs):
